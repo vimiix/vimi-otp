@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VimiOTP</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <!-- 主页面 -->
+    <div id="mainView">
+      <header class="header">
+        <h1>VimiOTP</h1>
+        <div class="header-actions">
+          <button id="exportBtn" class="icon-btn" title="导出密钥">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+          </button>
+          <button id="addBtn" class="icon-btn primary" title="添加 OTP">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- OTP 列表 -->
+      <div id="otpList" class="otp-list"></div>
+
+      <!-- 空状态 -->
+      <div id="emptyState" class="empty-state">
+        <p>暂无 OTP</p>
+        <p class="hint">点击右上角 + 添加</p>
+      </div>
+    </div>
+
+    <!-- 添加 OTP 页面 -->
+    <div id="addModal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>添加 OTP</h2>
+          <button id="closeModal" class="icon-btn">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+
+        <div class="tabs">
+          <button class="tab active" data-tab="manual">手动输入</button>
+          <button class="tab" data-tab="qrcode">扫描二维码</button>
+        </div>
+
+        <!-- 手动输入 -->
+        <div id="manualTab" class="tab-content active">
+          <div class="form-group">
+            <label for="accountName">账户名称</label>
+            <input type="text" id="accountName" placeholder="例如: GitHub">
+          </div>
+          <div class="form-group">
+            <label for="secretKey">密钥 (Secret Key)</label>
+            <input type="text" id="secretKey" placeholder="输入 Base32 密钥">
+          </div>
+          <button id="addManual" class="btn primary">添加</button>
+        </div>
+
+        <!-- 扫描二维码 -->
+        <div id="qrcodeTab" class="tab-content">
+          <p class="hint">点击下方按钮，将自动识别当前网页上的二维码</p>
+          <button id="scanQR" class="btn primary">扫描网页二维码</button>
+          <div id="scanResult" class="scan-result"></div>
+          <div id="qrList" class="qr-list hidden"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="lib/jssha.min.js"></script>
+  <script src="lib/jsqr.min.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
