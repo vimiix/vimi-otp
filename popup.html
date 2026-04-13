@@ -11,17 +11,38 @@
     <!-- 主页面 -->
     <div id="mainView">
       <header class="header">
-        <h1>VimiOTP</h1>
+        <div class="logo">
+          <svg class="logo-icon" width="26" height="26" viewBox="0 0 32 32" fill="none">
+            <defs>
+              <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#007aff"/>
+                <stop offset="100%" style="stop-color:#5856d6"/>
+              </linearGradient>
+            </defs>
+            <rect x="2" y="12" width="28" height="18" rx="4" fill="url(#logoGrad)"/>
+            <path d="M10 12V9a6 6 0 0 1 12 0v3" stroke="url(#logoGrad)" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+            <circle cx="16" cy="21" r="2.5" fill="#fff"/>
+            <line x1="16" y1="23.5" x2="16" y2="26" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <span class="logo-text">Vimi<span class="logo-highlight">OTP</span></span>
+        </div>
         <div class="header-actions">
-          <button id="exportBtn" class="icon-btn" title="导出密钥">
+          <button id="importBtn" class="icon-btn" title="导入备份">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
               <polyline points="7 10 12 15 17 10"></polyline>
               <line x1="12" y1="15" x2="12" y2="3"></line>
             </svg>
           </button>
-          <button id="addBtn" class="icon-btn primary" title="添加 OTP">
+          <button id="exportBtn" class="icon-btn" title="导出备份">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+          </button>
+          <button id="addBtn" class="icon-btn primary" title="添加 OTP">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <line x1="12" y1="5" x2="12" y2="19"></line>
               <line x1="5" y1="12" x2="19" y2="12"></line>
             </svg>
@@ -29,56 +50,102 @@
         </div>
       </header>
 
+      <!-- 搜索栏 -->
+      <div id="searchBar" class="search-bar hidden">
+        <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input type="text" id="searchInput" placeholder="搜索账户...">
+      </div>
+
       <!-- OTP 列表 -->
       <div id="otpList" class="otp-list"></div>
 
       <!-- 空状态 -->
       <div id="emptyState" class="empty-state">
-        <p>暂无 OTP</p>
-        <p class="hint">点击右上角 + 添加</p>
+        <div class="empty-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+          </svg>
+        </div>
+        <p class="empty-title">暂无验证码</p>
+        <p class="empty-hint">点击右上角 <span class="badge">+</span> 添加你的第一个 OTP</p>
       </div>
     </div>
 
     <!-- 添加 OTP 页面 -->
-    <div id="addModal" class="modal hidden">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h2>添加 OTP</h2>
-          <button id="closeModal" class="icon-btn">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
-        </div>
+    <div id="addView" class="view hidden">
+      <header class="view-header">
+        <button id="backBtn" class="icon-btn" title="返回">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
+        <h2>添加 OTP</h2>
+        <div style="width:30px"></div>
+      </header>
 
-        <div class="tabs">
-          <button class="tab active" data-tab="manual">手动输入</button>
-          <button class="tab" data-tab="qrcode">扫描二维码</button>
-        </div>
+      <div class="tabs">
+        <button class="tab active" data-tab="manual">手动输入</button>
+        <button class="tab" data-tab="qrcode">扫描二维码</button>
+      </div>
 
-        <!-- 手动输入 -->
-        <div id="manualTab" class="tab-content active">
-          <div class="form-group">
-            <label for="accountName">账户名称</label>
-            <input type="text" id="accountName" placeholder="例如: GitHub">
-          </div>
-          <div class="form-group">
-            <label for="secretKey">密钥 (Secret Key)</label>
-            <input type="text" id="secretKey" placeholder="输入 Base32 密钥">
-          </div>
-          <button id="addManual" class="btn primary">添加</button>
+      <!-- 手动输入 -->
+      <div id="manualTab" class="tab-content active">
+        <div class="form-group">
+          <label for="issuerName">服务商</label>
+          <input type="text" id="issuerName" placeholder="例如: GitHub, Google">
         </div>
+        <div class="form-group">
+          <label for="accountName">账户名称</label>
+          <input type="text" id="accountName" placeholder="例如: user@email.com">
+        </div>
+        <div class="form-group">
+          <label for="secretKey">密钥 (Secret Key)</label>
+          <input type="text" id="secretKey" placeholder="输入 Base32 密钥">
+        </div>
+        <button id="addManual" class="btn primary">添加</button>
+      </div>
 
-        <!-- 扫描二维码 -->
-        <div id="qrcodeTab" class="tab-content">
-          <p class="hint">点击下方按钮，将自动识别当前网页上的二维码</p>
-          <button id="scanQR" class="btn primary">扫描网页二维码</button>
-          <div id="scanResult" class="scan-result"></div>
-          <div id="qrList" class="qr-list hidden"></div>
-        </div>
+      <!-- 扫描二维码 -->
+      <div id="qrcodeTab" class="tab-content">
+        <p class="hint">点击下方按钮，将自动识别当前网页上的二维码</p>
+        <button id="scanQR" class="btn primary">扫描网页二维码</button>
+        <div id="scanResult" class="scan-result"></div>
+        <div id="qrList" class="qr-list hidden"></div>
       </div>
     </div>
+
+    <!-- 编辑 OTP 页面 -->
+    <div id="editView" class="view hidden">
+      <header class="view-header">
+        <button id="editBackBtn" class="icon-btn" title="返回">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
+        <h2>编辑 OTP</h2>
+        <div style="width:30px"></div>
+      </header>
+      <div class="form-group">
+        <label for="editIssuer">服务商</label>
+        <input type="text" id="editIssuer" placeholder="服务商名称">
+      </div>
+      <div class="form-group">
+        <label for="editName">账户名称</label>
+        <input type="text" id="editName" placeholder="账户名称">
+      </div>
+      <input type="hidden" id="editId">
+      <button id="saveEdit" class="btn primary">保存</button>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="toast hidden"></div>
+
+    <!-- 隐藏的导入文件输入 -->
+    <input type="file" id="importFile" accept=".json" style="display:none">
   </div>
 
   <script src="lib/jssha.min.js"></script>
