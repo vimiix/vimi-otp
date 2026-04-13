@@ -1,9 +1,11 @@
 // VimiOTP - Main popup script
 
+const i18n = new I18n();
+
 class VimiOTP {
   constructor() {
     this.otpList = [];
-    this.secretMap = new Map(); // id -> secret，避免 DOM 泄露
+    this.secretMap = new Map();
     this.timerInterval = null;
     this.searchQuery = '';
     this._lastPeriod = null;
@@ -11,10 +13,13 @@ class VimiOTP {
   }
 
   async init() {
+    i18n.applyToDOM();
     await this.loadOTPList();
     this.bindEvents();
     this.startTimer();
   }
+
+  t(key, ...args) { return i18n.t(key, ...args); }
 
   // ==================== Storage ====================
 
@@ -38,7 +43,7 @@ class VimiOTP {
       chrome.storage.local.set({ otpList: this.otpList }, () => {
         if (chrome.runtime.lastError) {
           console.error('Storage write error:', chrome.runtime.lastError);
-          this.showToast('保存失败');
+          this.showToast(this.t('msgSaveFailed'));
           reject(chrome.runtime.lastError);
         } else {
           resolve();
@@ -59,6 +64,13 @@ class VimiOTP {
     document.getElementById('addManual').addEventListener('click', () => this.addManualOTP());
     document.getElementById('scanQR').addEventListener('click', () => this.scanQRCode());
     document.getElementById('saveEdit').addEventListener('click', () => this.saveEditOTP());
+
+    // Language toggle
+    document.getElementById('langBtn').addEventListener('click', () => {
+      i18n.toggleLang();
+      i18n.applyToDOM();
+      this.renderOTPList();
+    });
 
     // Tab switching
     document.querySelectorAll('.tab').forEach(tab => {
@@ -120,22 +132,13 @@ class VimiOTP {
     const name = document.getElementById('accountName').value.trim();
     const secret = document.getElementById('secretKey').value.trim().replace(/\s/g, '').toUpperCase();
 
-    if (!name) {
-      this.showToast('请输入账户名称');
-      return;
-    }
-    if (!secret || !this.isValidBase32(secret)) {
-      this.showToast('请输入有效的 Base32 密钥');
-      return;
-    }
-    if (this.isDuplicateSecret(secret)) {
-      this.showToast('该密钥已存在');
-      return;
-    }
+    if (!name) { this.showToast(this.t('msgNameRequired')); return; }
+    if (!secret || !this.isValidBase32(secret)) { this.showToast(this.t('msgInvalidSecret')); return; }
+    if (this.isDuplicateSecret(secret)) { this.showToast(this.t('msgDuplicateSecret')); return; }
 
     await this.addOTP(name, secret, issuer);
     this.showView('mainView');
-    this.showToast('添加成功');
+    this.showToast(this.t('msgAddSuccess'));
   }
 
   isValidBase32(str) {
@@ -151,9 +154,7 @@ class VimiOTP {
   async addOTP(name, secret, issuer = '') {
     const otp = {
       id: crypto.randomUUID(),
-      name,
-      secret,
-      issuer,
+      name, secret, issuer,
       order: this.otpList.length,
       createdAt: new Date().toISOString()
     };
@@ -178,10 +179,7 @@ class VimiOTP {
     const issuer = document.getElementById('editIssuer').value.trim();
     const name = document.getElementById('editName').value.trim();
 
-    if (!name) {
-      this.showToast('账户名称不能为空');
-      return;
-    }
+    if (!name) { this.showToast(this.t('msgNameEmpty')); return; }
 
     const otp = this.otpList.find(o => o.id === id);
     if (otp) {
@@ -189,36 +187,28 @@ class VimiOTP {
       otp.name = name;
       await this.saveOTPList();
       this.showView('mainView');
-      this.showToast('保存成功');
+      this.showToast(this.t('msgSaveSuccess'));
     }
   }
 
   // ==================== Delete OTP ====================
 
   async deleteOTP(id) {
-    if (!confirm('确定删除？')) return;
+    if (!confirm(this.t('msgConfirmDelete'))) return;
     this.otpList = this.otpList.filter(otp => otp.id !== id);
     await this.saveOTPList();
     this.renderOTPList();
-    this.showToast('已删除');
+    this.showToast(this.t('msgDeleted'));
   }
 
   // ==================== Export / Import ====================
 
   exportKeys() {
-    if (this.otpList.length === 0) {
-      this.showToast('没有可导出的数据');
-      return;
-    }
+    if (this.otpList.length === 0) { this.showToast(this.t('msgNoData')); return; }
     const exportData = {
-      version: 1,
-      app: 'VimiOTP',
+      version: 1, app: 'VimiOTP',
       exportedAt: new Date().toISOString(),
-      accounts: this.otpList.map(otp => ({
-        name: otp.name,
-        secret: otp.secret,
-        issuer: otp.issuer || ''
-      }))
+      accounts: this.otpList.map(otp => ({ name: otp.name, secret: otp.secret, issuer: otp.issuer || '' }))
     };
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -229,49 +219,33 @@ class VimiOTP {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    this.showToast('导出成功');
+    this.showToast(this.t('msgExportSuccess'));
   }
 
   async importKeys(event) {
     const file = event.target.files[0];
     if (!file) return;
-
     try {
       const text = await file.text();
       const data = JSON.parse(text);
+      if (!data.accounts || !Array.isArray(data.accounts)) { this.showToast(this.t('msgInvalidFile')); return; }
 
-      if (!data.accounts || !Array.isArray(data.accounts)) {
-        this.showToast('无效的备份文件');
-        return;
-      }
-
-      let added = 0;
-      let skipped = 0;
+      let added = 0, skipped = 0;
       for (const account of data.accounts) {
         if (!account.secret || !account.name) continue;
         const secret = account.secret.replace(/\s/g, '').toUpperCase();
         if (!this.isValidBase32(secret)) continue;
-
-        if (this.isDuplicateSecret(secret)) {
-          skipped++;
-          continue;
-        }
+        if (this.isDuplicateSecret(secret)) { skipped++; continue; }
         await this.addOTP(account.name, secret, account.issuer || '');
         added++;
       }
 
-      if (added > 0) {
-        this.showToast(`导入成功 ${added} 个${skipped > 0 ? `，跳过 ${skipped} 个重复` : ''}`);
-      } else if (skipped > 0) {
-        this.showToast(`全部 ${skipped} 个已存在，跳过`);
-      } else {
-        this.showToast('未找到有效数据');
-      }
+      if (added > 0) this.showToast(this.t('msgImportSuccess', added, skipped));
+      else if (skipped > 0) this.showToast(this.t('msgAllSkipped', skipped));
+      else this.showToast(this.t('msgNoValidData'));
     } catch (e) {
-      this.showToast('导入失败：文件格式错误');
+      this.showToast(this.t('msgImportFailed'));
     }
-
-    // Reset file input
     event.target.value = '';
   }
 
@@ -282,12 +256,8 @@ class VimiOTP {
     const emptyEl = document.getElementById('emptyState');
     const searchBar = document.getElementById('searchBar');
 
-    // Show/hide search bar
-    if (this.otpList.length >= 3) {
-      searchBar.classList.remove('hidden');
-    } else {
-      searchBar.classList.add('hidden');
-    }
+    if (this.otpList.length >= 3) searchBar.classList.remove('hidden');
+    else searchBar.classList.add('hidden');
 
     if (this.otpList.length === 0) {
       listEl.innerHTML = '';
@@ -297,7 +267,6 @@ class VimiOTP {
 
     emptyEl.classList.add('hidden');
 
-    // Filter by search
     let filtered = this.otpList;
     if (this.searchQuery) {
       filtered = this.otpList.filter(otp =>
@@ -307,11 +276,10 @@ class VimiOTP {
     }
 
     if (filtered.length === 0) {
-      listEl.innerHTML = '<div class="empty-state" style="padding:20px"><p class="empty-hint">无匹配结果</p></div>';
+      listEl.innerHTML = `<div class="empty-state" style="padding:20px"><p class="empty-hint">${this.t('msgNoMatch')}</p></div>`;
       return;
     }
 
-    // 构建 secret 映射
     this.secretMap.clear();
     filtered.forEach(otp => this.secretMap.set(otp.id, otp.secret));
 
@@ -325,13 +293,13 @@ class VimiOTP {
           <div class="otp-account">
             <span class="otp-account-name">${label}</span>
             <div class="otp-actions">
-              <button class="icon-btn edit-btn" data-id="${otp.id}" title="编辑">
+              <button class="icon-btn edit-btn" data-id="${otp.id}" title="${this.t('tipEdit')}">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                   <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                 </svg>
               </button>
-              <button class="icon-btn delete-btn" data-id="${otp.id}" title="删除">
+              <button class="icon-btn delete-btn" data-id="${otp.id}" title="${this.t('tipDelete')}">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline points="3 6 5 6 21 6"></polyline>
                   <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -339,7 +307,7 @@ class VimiOTP {
               </button>
             </div>
           </div>
-          <div class="otp-code" data-id="${otp.id}" title="点击复制">${displayCode}</div>
+          <div class="otp-code" data-id="${otp.id}" title="${this.t('tipCopy')}">${displayCode}</div>
           <div class="otp-timer">
             <div class="timer-bar">
               <div class="timer-progress" data-id="${otp.id}"></div>
@@ -350,21 +318,12 @@ class VimiOTP {
       `;
     }).join('');
 
-    // Bind events
     listEl.querySelectorAll('.delete-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.deleteOTP(btn.dataset.id);
-      });
+      btn.addEventListener('click', (e) => { e.stopPropagation(); this.deleteOTP(btn.dataset.id); });
     });
-
     listEl.querySelectorAll('.edit-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.showEditOTP(btn.dataset.id);
-      });
+      btn.addEventListener('click', (e) => { e.stopPropagation(); this.showEditOTP(btn.dataset.id); });
     });
-
     listEl.querySelectorAll('.otp-code').forEach(codeEl => {
       codeEl.addEventListener('click', () => this.copyCode(codeEl));
     });
@@ -379,11 +338,9 @@ class VimiOTP {
     try {
       await navigator.clipboard.writeText(code);
       codeEl.classList.add('copied');
-      this.showToast('已复制到剪贴板');
+      this.showToast(this.t('msgCopied'));
       setTimeout(() => codeEl.classList.remove('copied'), 1500);
-    } catch (err) {
-      console.error('Copy failed:', err);
-    }
+    } catch (err) { console.error('Copy failed:', err); }
   }
 
   // ==================== Timer ====================
@@ -397,31 +354,22 @@ class VimiOTP {
     const remaining = 30 - (now % 30);
     const progress = (remaining / 30) * 100;
 
-    // 检测周期变化，可靠地触发刷新
     const currentPeriod = Math.floor(now / 30);
-    if (this._lastPeriod !== null && currentPeriod !== this._lastPeriod) {
-      this.refreshCodes();
-    }
+    if (this._lastPeriod !== null && currentPeriod !== this._lastPeriod) this.refreshCodes();
     this._lastPeriod = currentPeriod;
 
-    // Update bar timers
     document.querySelectorAll('.timer-progress').forEach(bar => {
       bar.style.width = `${progress}%`;
       bar.classList.remove('warning', 'danger');
       if (remaining <= 5) bar.classList.add('danger');
       else if (remaining <= 10) bar.classList.add('warning');
     });
-
-    // Update texts
-    document.querySelectorAll('.timer-text').forEach(text => {
-      text.textContent = remaining;
-    });
+    document.querySelectorAll('.timer-text').forEach(text => { text.textContent = remaining; });
   }
 
   refreshCodes() {
     document.querySelectorAll('.otp-code').forEach(codeEl => {
-      const id = codeEl.dataset.id;
-      const secret = this.secretMap.get(id);
+      const secret = this.secretMap.get(codeEl.dataset.id);
       if (!secret) return;
       const code = this.generateTOTP(secret);
       codeEl.textContent = code.slice(0, 3) + ' ' + code.slice(3);
@@ -435,23 +383,15 @@ class VimiOTP {
       const key = this.base32ToBytes(secret);
       const time = Math.floor(Date.now() / 1000 / period);
       const timeBytes = this.intToBytes(time);
-
       const hmac = new jsSHA('SHA-1', 'UINT8ARRAY');
       hmac.setHMACKey(key, 'UINT8ARRAY');
       hmac.update(timeBytes);
       const hash = hmac.getHMAC('UINT8ARRAY');
-
       const offset = hash[hash.length - 1] & 0x0f;
-      const binary = ((hash[offset] & 0x7f) << 24) |
-                     ((hash[offset + 1] & 0xff) << 16) |
-                     ((hash[offset + 2] & 0xff) << 8) |
-                     (hash[offset + 3] & 0xff);
-
+      const binary = ((hash[offset] & 0x7f) << 24) | ((hash[offset + 1] & 0xff) << 16) |
+                     ((hash[offset + 2] & 0xff) << 8) | (hash[offset + 3] & 0xff);
       return (binary % Math.pow(10, digits)).toString().padStart(digits, '0');
-    } catch (e) {
-      console.error('TOTP generation error:', e);
-      return '------';
-    }
+    } catch (e) { console.error('TOTP generation error:', e); return '------'; }
   }
 
   base32ToBytes(base32) {
@@ -464,19 +404,14 @@ class VimiOTP {
       bits += val.toString(2).padStart(5, '0');
     }
     const bytes = new Uint8Array(Math.floor(bits.length / 8));
-    for (let i = 0; i < bytes.length; i++) {
-      bytes[i] = parseInt(bits.slice(i * 8, i * 8 + 8), 2);
-    }
+    for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(bits.slice(i * 8, i * 8 + 8), 2);
     return bytes;
   }
 
   intToBytes(num) {
     const bytes = new Uint8Array(8);
     let bigNum = BigInt(num);
-    for (let i = 7; i >= 0; i--) {
-      bytes[i] = Number(bigNum & 0xffn);
-      bigNum = bigNum >> 8n;
-    }
+    for (let i = 7; i >= 0; i--) { bytes[i] = Number(bigNum & 0xffn); bigNum = bigNum >> 8n; }
     return bytes;
   }
 
@@ -492,7 +427,7 @@ class VimiOTP {
     const resultEl = document.getElementById('scanResult');
     const qrListEl = document.getElementById('qrList');
     resultEl.className = 'scan-result';
-    resultEl.textContent = '正在扫描...';
+    resultEl.textContent = this.t('msgScanning');
     resultEl.style.display = 'block';
     qrListEl.classList.add('hidden');
     qrListEl.innerHTML = '';
@@ -500,12 +435,11 @@ class VimiOTP {
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-      // 检测无法扫描的特殊页面
       if (!tab || !tab.url || tab.url.startsWith('chrome://') ||
           tab.url.startsWith('chrome-extension://') || tab.url.startsWith('about:') ||
           tab.url.startsWith('edge://') || tab.url.startsWith('brave://')) {
         resultEl.className = 'scan-result error';
-        resultEl.textContent = '无法在此页面执行扫描';
+        resultEl.textContent = this.t('msgCannotScan');
         return;
       }
 
@@ -514,9 +448,7 @@ class VimiOTP {
         func: () => {
           const images = [];
           document.querySelectorAll('img').forEach(img => {
-            if (img.src && img.naturalWidth >= 20 && img.naturalHeight >= 20) {
-              images.push(img.src);
-            }
+            if (img.src && img.naturalWidth >= 20 && img.naturalHeight >= 20) images.push(img.src);
           });
           document.querySelectorAll('canvas').forEach(canvas => {
             if (canvas.width >= 20 && canvas.height >= 20) {
@@ -538,7 +470,7 @@ class VimiOTP {
       const images = results[0].result;
       if (!images || images.length === 0) {
         resultEl.className = 'scan-result error';
-        resultEl.textContent = '未找到图片';
+        resultEl.textContent = this.t('msgNoImages');
         return;
       }
 
@@ -547,15 +479,13 @@ class VimiOTP {
         const otpUri = await this.decodeQRFromImage(imgSrc);
         if (otpUri) {
           const parsed = this.parseOTPUri(otpUri);
-          if (parsed && !foundOTPs.some(o => o.secret === parsed.secret)) {
-            foundOTPs.push(parsed);
-          }
+          if (parsed && !foundOTPs.some(o => o.secret === parsed.secret)) foundOTPs.push(parsed);
         }
       }
 
       if (foundOTPs.length === 0) {
         resultEl.className = 'scan-result error';
-        resultEl.textContent = '未找到有效的 OTP 二维码';
+        resultEl.textContent = this.t('msgNoQR');
         return;
       }
 
@@ -563,40 +493,37 @@ class VimiOTP {
         const otp = foundOTPs[0];
         if (this.isDuplicateSecret(otp.secret)) {
           resultEl.className = 'scan-result error';
-          resultEl.textContent = '该密钥已存在';
+          resultEl.textContent = this.t('msgSecretExists');
           return;
         }
         await this.addOTP(otp.name, otp.secret, otp.issuer);
         resultEl.className = 'scan-result success';
-        resultEl.textContent = `已添加: ${otp.issuer || otp.name}`;
+        resultEl.textContent = this.t('msgAdded', otp.issuer || otp.name);
         setTimeout(() => this.showView('mainView'), 1200);
         return;
       }
 
       resultEl.className = 'scan-result success';
-      resultEl.textContent = `找到 ${foundOTPs.length} 个 OTP，请选择:`;
+      resultEl.textContent = this.t('msgFoundQR', foundOTPs.length);
 
       qrListEl.classList.remove('hidden');
-      qrListEl.innerHTML = foundOTPs.map((otp, i) => `
-        <div class="qr-item">
-          <div class="qr-item-info">
-            <div class="qr-item-name">${this.escapeHtml(otp.name)}</div>
-            ${otp.issuer ? `<div class="qr-item-issuer">${this.escapeHtml(otp.issuer)}</div>` : ''}
-          </div>
-          <button class="qr-item-btn" data-index="${i}">${this.isDuplicateSecret(otp.secret) ? '已存在' : '添加'}</button>
-        </div>
-      `).join('');
+      qrListEl.innerHTML = foundOTPs.map((otp, i) => {
+        const isDup = this.isDuplicateSecret(otp.secret);
+        return `
+          <div class="qr-item">
+            <div class="qr-item-info">
+              <div class="qr-item-name">${this.escapeHtml(otp.name)}</div>
+              ${otp.issuer ? `<div class="qr-item-issuer">${this.escapeHtml(otp.issuer)}</div>` : ''}
+            </div>
+            <button class="qr-item-btn${isDup ? ' added' : ''}" data-index="${i}" ${isDup ? 'disabled' : ''}>${isDup ? this.t('qrBtnExists') : this.t('qrBtnAdd')}</button>
+          </div>`;
+      }).join('');
 
-      qrListEl.querySelectorAll('.qr-item-btn').forEach(btn => {
-        if (btn.textContent === '已存在') {
-          btn.classList.add('added');
-          btn.disabled = true;
-          return;
-        }
+      qrListEl.querySelectorAll('.qr-item-btn:not(.added)').forEach(btn => {
         btn.addEventListener('click', async (e) => {
           const otp = foundOTPs[parseInt(e.target.dataset.index)];
           await this.addOTP(otp.name, otp.secret, otp.issuer);
-          e.target.textContent = '已添加';
+          e.target.textContent = this.t('qrBtnAdded');
           e.target.classList.add('added');
           e.target.disabled = true;
         });
@@ -604,7 +531,7 @@ class VimiOTP {
     } catch (err) {
       console.error('Scan error:', err);
       resultEl.className = 'scan-result error';
-      resultEl.textContent = '扫描失败: ' + err.message;
+      resultEl.textContent = this.t('msgScanFailed', err.message);
     }
   }
 
@@ -614,8 +541,7 @@ class VimiOTP {
       img.crossOrigin = 'anonymous';
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
+        canvas.width = img.width; canvas.height = img.height;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0);
         try {
@@ -634,19 +560,15 @@ class VimiOTP {
       const url = new URL(uri);
       if (url.protocol !== 'otpauth:') return null;
       if (url.hostname !== 'totp') return null;
-
       const path = decodeURIComponent(url.pathname.slice(1));
       const secret = url.searchParams.get('secret');
       const issuer = url.searchParams.get('issuer') || '';
       if (!secret) return null;
-
       let name = path;
       if (path.includes(':')) name = path.split(':')[1];
-
       return { name, secret: secret.toUpperCase(), issuer };
     } catch (e) { return null; }
   }
 }
 
-// Initialize
 document.addEventListener('DOMContentLoaded', () => new VimiOTP());

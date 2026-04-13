@@ -26,6 +26,7 @@ zip:
 		popup.html \
 		popup.css \
 		popup.js \
+		i18n.js \
 		icons/ \
 		lib/ \
 		-x "*.DS_Store" \
